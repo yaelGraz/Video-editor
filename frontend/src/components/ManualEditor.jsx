@@ -119,6 +119,9 @@ function ManualEditor() {
   const [isLoadingFont, setIsLoadingFont] = useState(false);
   const [fontLoadError, setFontLoadError] = useState(null);
 
+  // Processing state
+  const [processError, setProcessError] = useState(null);
+
   // Music state
   const [musicLinkUrl, setMusicLinkUrl] = useState('');
   const [isDownloadingMusic, setIsDownloadingMusic] = useState(false);
@@ -490,6 +493,131 @@ function ManualEditor() {
     ctx.setAudioError(null);
     updateSetting('musicFile', file.name);
     updateSetting('musicSource', 'upload');
+  };
+
+  // =============================================================================
+  // PROCESS VIDEO - Send to /process with all manual settings
+  // =============================================================================
+
+  const handleProcessVideo = async () => {
+    if (!ctx.videoFile || ctx.isProcessing) return;
+
+    setProcessError(null);
+    ctx.setIsProcessing(true);
+    ctx.setProgress(0);
+    ctx.setProgressMessage('מתחיל עיבוד...');
+    ctx.setResultUrl(null);
+
+    const opts = ctx.processingOptions || {};
+
+    try {
+      const formData = new FormData();
+      formData.append('video', ctx.videoFile);
+
+      // Subtitles
+      const doSubtitles = opts.doSubtitles ?? true;
+      const doStyledSubtitles = opts.doStyledSubtitles ?? true;
+      formData.append('do_subtitles', doSubtitles);
+      formData.append('do_styled_subtitles', doStyledSubtitles);
+
+      // Music
+      formData.append('do_music', opts.doMusic ?? true);
+      formData.append('music_style', opts.musicStyle || 'calm');
+
+      // Marketing options
+      formData.append('do_marketing', opts.doMarketing ?? true);
+      formData.append('do_thumbnail', opts.doThumbnail ?? true);
+      formData.append('do_ai_thumbnail', opts.doAiThumbnail ?? false);
+      formData.append('do_shorts', opts.doShorts ?? false);
+      formData.append('do_voiceover', opts.doVoiceover ?? false);
+
+      // Font settings from manual editor
+      formData.append('font_name', settings.font || 'Arial');
+      formData.append('font_color', settings.fontColor || '#FFFFFF');
+      formData.append('font_size', settings.fontSize || 24);
+
+      // Music settings
+      formData.append('music_volume', settings.musicVolume ?? 0.15);
+      formData.append('ducking', settings.ducking ?? true);
+
+      // Music source
+      if (settings.musicFile) {
+        formData.append('music_source', 'library');
+        formData.append('music_library_file', settings.musicFile);
+      } else if (ctx.audioUrl) {
+        if (ctx.audioUrl.includes('/assets/music/')) {
+          const filename = ctx.audioUrl.split('/assets/music/').pop();
+          formData.append('music_source', 'library');
+          formData.append('music_library_file', filename);
+        } else {
+          formData.append('music_source', 'link');
+          formData.append('music_url', ctx.audioUrl);
+        }
+      }
+
+      console.log('[ManualEditor] ========== PROCESSING ==========');
+      console.log('[ManualEditor] Font:', settings.font, 'Color:', settings.fontColor, 'Size:', settings.fontSize);
+      console.log('[ManualEditor] Music:', settings.musicFile || ctx.audioUrl || 'auto');
+      console.log('[ManualEditor] ================================');
+
+      const response = await fetch(`${apiUrl}/process`, {
+        method: 'POST',
+        body: formData,
+      });
+
+      const data = await response.json();
+
+      if (data.file_id) {
+        const ws = new WebSocket(`${ctx.wsUrl}/ws/progress/${data.file_id}`);
+
+        ws.onmessage = (event) => {
+          const msg = JSON.parse(event.data);
+          ctx.setProgress(msg.progress || 0);
+          ctx.setProgressMessage(msg.message || '');
+
+          if (msg.status === 'completed') {
+            ctx.setIsProcessing(false);
+            ctx.setResultUrl(msg.download_url);
+            if (msg.marketing_kit) ctx.setMarketingKit(msg.marketing_kit);
+            if (msg.thumbnail_url) ctx.setThumbnailUrl(msg.thumbnail_url);
+            if (msg.ai_thumbnail_url) ctx.setAiThumbnailUrl(msg.ai_thumbnail_url);
+            if (msg.shorts_urls?.length > 0) ctx.setShortsUrls(msg.shorts_urls);
+            ws.close();
+          }
+
+          if (msg.status === 'subtitle_review') {
+            const subtitles = Array.isArray(msg.subtitles) ? msg.subtitles : [];
+            if (typeof ctx.setSubtitleReview === 'function') {
+              ctx.setSubtitleReview({
+                isActive: true,
+                entries: subtitles,
+                pendingFileId: data.file_id,
+              });
+            }
+            ctx.setIsProcessing(false);
+            ctx.setProgress(20);
+            ctx.setProgressMessage('כתוביות מוכנות לעריכה');
+          }
+
+          if (msg.status === 'error') {
+            ctx.setIsProcessing(false);
+            setProcessError(msg.message || 'שגיאה בעיבוד');
+            ws.close();
+          }
+        };
+
+        ws.onerror = () => {
+          ctx.setIsProcessing(false);
+          setProcessError('שגיאת חיבור לשרת');
+        };
+      } else {
+        throw new Error(data.error || 'שגיאה בשליחה לשרת');
+      }
+    } catch (err) {
+      ctx.setIsProcessing(false);
+      setProcessError(err.message);
+      console.error('[ManualEditor] Process error:', err);
+    }
   };
 
   // =============================================================================
@@ -884,12 +1012,7 @@ function ManualEditor() {
       {/* ========== PROCESS BUTTON ========== */}
       <div className="p-4 border-t border-white/5 mt-auto">
         <button
-          onClick={() => {
-            if (ctx.videoFile) {
-              const event = new CustomEvent('manualProcess', { detail: settings });
-              window.dispatchEvent(event);
-            }
-          }}
+          onClick={handleProcessVideo}
           disabled={!ctx.videoFile || ctx.isProcessing}
           className={`w-full py-3 rounded-xl text-sm font-semibold transition-all ${
             ctx.videoFile && !ctx.isProcessing
@@ -908,6 +1031,9 @@ function ManualEditor() {
         </button>
         {!ctx.videoFile && (
           <p className="text-[10px] text-gray-500 text-center mt-2">יש להעלות וידאו קודם</p>
+        )}
+        {processError && (
+          <p className="text-xs text-red-400 text-center mt-2">{processError}</p>
         )}
       </div>
     </div>

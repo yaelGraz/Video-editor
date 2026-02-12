@@ -41,6 +41,11 @@ LEONARDO_API_KEY = os.getenv("LEONARDO_API_KEY")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY") or os.getenv("LEVENLABS_API_KEY")
 
+# YouTube Upload (Google OAuth2)
+YOUTUBE_CLIENT_ID = os.getenv("YOUTUBE_CLIENT_ID", "")
+YOUTUBE_CLIENT_SECRET = os.getenv("YOUTUBE_CLIENT_SECRET", "")
+YOUTUBE_REFRESH_TOKEN = os.getenv("YOUTUBE_REFRESH_TOKEN", "")
+
 # =============================================================================
 # ElevenLabs Configuration
 # =============================================================================

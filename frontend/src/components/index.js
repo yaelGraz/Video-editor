@@ -13,7 +13,8 @@ export { default as VideoPlanner } from './VideoPlanner';
 export { default as ManualEditor } from './ManualEditor';
 export { default as SubtitleReviewPanel } from './SubtitleReviewPanel';
 
-// Tab Components (4-Tab Top Navigation)
+// Tab Components (5-Tab Top Navigation)
 export { default as EditorTab } from './EditorTab';
 export { default as YouTubeTab } from './YouTubeTab';
 export { default as PlannerTab } from './PlannerTab';
+export { default as EffectsStudioTab } from './EffectsStudioTab';

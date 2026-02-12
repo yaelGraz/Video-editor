@@ -120,6 +120,7 @@ def parse_srt_file(srt_path: str) -> List[Dict]:
     """
     Parse SRT file and return list of subtitle entries.
     Each entry: {'index': int, 'start': float, 'end': float, 'text': str}
+    Handles both standard SRT (with blank lines) and malformed SRT (without blank lines).
     """
     entries = []
     try:
@@ -129,17 +130,19 @@ def parse_srt_file(srt_path: str) -> List[Dict]:
         # Normalize line endings (AI corrections may introduce \r\n or \r)
         content = content.replace('\r\n', '\n').replace('\r', '\n')
 
+        # First, try standard SRT parsing (split by blank lines)
         blocks = re.split(r'\n\n+', content.strip())
+
+        timing_re = re.compile(
+            r'(\d{2}):(\d{2}):(\d{2}),(\d{3})\s*-->\s*(\d{2}):(\d{2}):(\d{2}),(\d{3})'
+        )
 
         for block in blocks:
             lines = block.strip().split('\n')
             if len(lines) >= 3:
                 try:
                     index = int(lines[0])
-                    timing_match = re.match(
-                        r'(\d{2}):(\d{2}):(\d{2}),(\d{3})\s*-->\s*(\d{2}):(\d{2}):(\d{2}),(\d{3})',
-                        lines[1]
-                    )
+                    timing_match = timing_re.match(lines[1])
                     if timing_match:
                         g = timing_match.groups()
                         start = int(g[0])*3600 + int(g[1])*60 + int(g[2]) + int(g[3])/1000
@@ -153,6 +156,50 @@ def parse_srt_file(srt_path: str) -> List[Dict]:
                         })
                 except (ValueError, IndexError):
                     continue
+
+        # Fallback: if standard parsing found <= 1 entry but file has multiple timestamps,
+        # parse line-by-line (handles SRT without blank lines, e.g. from AI corrections)
+        if len(entries) <= 1 and content.count('-->') > 1:
+            print(f"[WARNING] Standard SRT parsing found only {len(entries)} entries but file has {content.count('-->')} timestamps. Using line-by-line parser.")
+            entries = []
+            all_lines = content.strip().split('\n')
+            i = 0
+            while i < len(all_lines):
+                line = all_lines[i].strip()
+                # Look for index line (just a number)
+                if line.isdigit():
+                    idx = int(line)
+                    # Next line should be timing
+                    if i + 1 < len(all_lines):
+                        timing_match = timing_re.match(all_lines[i + 1].strip())
+                        if timing_match:
+                            g = timing_match.groups()
+                            start = int(g[0])*3600 + int(g[1])*60 + int(g[2]) + int(g[3])/1000
+                            end = int(g[4])*3600 + int(g[5])*60 + int(g[6]) + int(g[7])/1000
+                            # Collect text lines until next index or end
+                            text_lines = []
+                            j = i + 2
+                            while j < len(all_lines):
+                                tl = all_lines[j].strip()
+                                if tl == '':
+                                    j += 1
+                                    break
+                                # Check if this line is the next index
+                                if tl.isdigit() and j + 1 < len(all_lines) and '-->' in all_lines[j + 1]:
+                                    break
+                                text_lines.append(tl)
+                                j += 1
+                            text = ' '.join(text_lines).strip()
+                            if text:
+                                entries.append({
+                                    'index': idx,
+                                    'start': start,
+                                    'end': end,
+                                    'text': text
+                                })
+                            i = j
+                            continue
+                i += 1
 
         print(f"[INFO] Parsed {len(entries)} subtitle entries from SRT")
         return entries
@@ -427,6 +474,25 @@ Here is the SRT file to correct:
                         if corrected_srt.startswith('srt'):
                             corrected_srt = corrected_srt[3:].strip()
                         break
+
+            # Gemini often strips blank lines between SRT entries.
+            # Re-insert them: a line with just a number followed by a timestamp line
+            # needs a blank line before the number.
+            import re as _re
+            lines = corrected_srt.split('\n')
+            fixed_lines = []
+            for i, line in enumerate(lines):
+                # If this line is a subtitle index (just a number) and the previous
+                # line is NOT blank, insert a blank line before it
+                if (i > 0
+                    and line.strip().isdigit()
+                    and i + 1 < len(lines)
+                    and '-->' in lines[i + 1]
+                    and fixed_lines
+                    and fixed_lines[-1].strip() != ''):
+                    fixed_lines.append('')
+                fixed_lines.append(line)
+            corrected_srt = '\n'.join(fixed_lines)
 
             if '-->' in corrected_srt:
                 # Backup original

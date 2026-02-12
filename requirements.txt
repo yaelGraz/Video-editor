@@ -18,5 +18,8 @@ deep-translator>=1.11.4
 python-bidi>=0.4.2
 arabic-reshaper>=3.0.0
 certifi>=2023.0.0
+google-api-python-client>=2.100.0
+google-auth-oauthlib>=1.1.0
+google-auth-httplib2>=0.2.0
 
 

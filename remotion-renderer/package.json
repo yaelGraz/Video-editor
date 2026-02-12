@@ -1,0 +1,22 @@
+{
+  "name": "video-ai-effects-renderer",
+  "version": "1.0.0",
+  "description": "Remotion-based effects renderer for Video AI Studio",
+  "scripts": {
+    "dev": "npx remotion studio",
+    "render": "npx remotion render",
+    "build": "npx remotion compositions src/index.ts"
+  },
+  "dependencies": {
+    "@remotion/cli": "4.0.242",
+    "@remotion/player": "4.0.242",
+    "remotion": "4.0.242",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.3",
+    "@types/node": "^22.0.0",
+    "typescript": "^5.5.0"
+  }
+}

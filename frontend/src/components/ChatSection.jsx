@@ -96,11 +96,19 @@ function ChatSection({ isInTab = false }) {
     setMessages(prev => [...prev, { role, content }]);
   };
 
-  const isYouTubeUrl = (text) => {
+  // Check if the message is ONLY a YouTube URL (no other text)
+  // If the user added extra words/commands alongside the link → send to /chat instead
+  const isOnlyYouTubeUrl = (text) => {
+    const trimmed = text.trim();
+    return /^https?:\/\/(?:www\.)?(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/shorts\/)[\w-]+(?:[?&]\S*)?$/.test(trimmed);
+  };
+
+  // Check if text contains a YouTube URL anywhere (for logging)
+  const containsYouTubeUrl = (text) => {
     return /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/shorts\/)/.test(text);
   };
 
-  // Send message to backend
+  // Send message to backend (with retry on transient connection errors)
   const sendMessageToBackend = async (message, history) => {
     const contextMessages = history.slice(-MAX_HISTORY_LENGTH);
 
@@ -125,16 +133,52 @@ function ChatSection({ isInTab = false }) {
     formData.append('currentContext', JSON.stringify(currentContext));
     formData.append('has_video', ctx.videoFile ? 'true' : 'false');
 
-    const response = await fetch(`${apiUrl}/chat`, {
-      method: 'POST',
-      body: formData
+    const sendTime = new Date().toLocaleTimeString('he-IL');
+    console.log(`[Chat] >>> [${sendTime}] Sending to /chat:`, {
+      message,
+      hasYouTubeUrl: /youtube\.com|youtu\.be/.test(message),
+      contextKeys: Object.keys(currentContext),
     });
 
-    if (!response.ok) {
-      throw new Error(`שגיאת שרת: ${response.status}`);
-    }
+    // Retry once on transient network failures (connection reset, etc.)
+    let lastError = null;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const t0 = performance.now();
+        const response = await fetch(`${apiUrl}/chat`, {
+          method: 'POST',
+          body: formData
+        });
+        const elapsed = Math.round(performance.now() - t0);
 
-    return await response.json();
+        if (!response.ok) {
+          console.error(`[Chat] !!! Server returned HTTP ${response.status} after ${elapsed}ms`);
+          throw new Error(`שגיאת שרת: ${response.status}`);
+        }
+
+        const data = await response.json();
+        console.log(`[Chat] <<< [${elapsed}ms] Server response:`, {
+          answer: data.answer?.slice(0, 80),
+          commandCount: data.commands?.length ?? (data.command ? 1 : 0),
+          commands: data.commands || (data.command ? [data.command] : [])
+        });
+        return data;
+      } catch (err) {
+        lastError = err;
+        const isTransient = err.message.includes('Failed to fetch') ||
+                            err.message.includes('NetworkError') ||
+                            err.message.includes('ERR_CONNECTION');
+        if (isTransient && attempt === 0) {
+          console.warn(`[Chat] !!! Request FAILED before reaching server (attempt ${attempt + 1}/2): ${err.message}`);
+          console.warn('[Chat] Retrying in 1s...');
+          await new Promise(r => setTimeout(r, 1000));
+          continue;
+        }
+        console.error(`[Chat] !!! Request FAILED (attempt ${attempt + 1}/2, giving up): ${err.message}`);
+        throw err;
+      }
+    }
+    throw lastError;
   };
 
   // Download YouTube audio
@@ -364,6 +408,11 @@ function ChatSection({ isInTab = false }) {
         const data = await response.json();
 
         if (data.file_id) {
+          // Store file_id immediately so Effects tab can find the video on server
+          if (typeof ctx.setUploadedVideoId === 'function') {
+            ctx.setUploadedVideoId(data.file_id);
+            console.log('[ChatSection] Stored file_id as uploadedVideoId:', data.file_id);
+          }
           const ws = new WebSocket(`${ctx.wsUrl}/ws/progress/${data.file_id}`);
 
           ws.onmessage = (event) => {
@@ -387,6 +436,12 @@ function ChatSection({ isInTab = false }) {
               }
               if (msgData.shorts_urls && msgData.shorts_urls.length > 0) {
                 ctx.setShortsUrls(msgData.shorts_urls);
+              }
+
+              // Capture music URL from backend (auto-selected music)
+              if (msgData.music_url && !ctx.audioUrl) {
+                console.log('[ChatSection] Setting audioUrl from backend:', msgData.music_url);
+                ctx.setAudioUrl(msgData.music_url);
               }
 
               // Build completion message with results summary
@@ -478,8 +533,11 @@ function ChatSection({ isInTab = false }) {
     setInputValue('');
     addMessage('user', userMessage);
 
-    // Direct YouTube URL handling
-    if (isYouTubeUrl(userMessage)) {
+    // Direct YouTube URL handling — ONLY if the message is purely a URL
+    // If there's any extra text (commands, instructions), route to /chat so the AI
+    // can parse all intents (e.g. "download from YT + change font to red")
+    if (isOnlyYouTubeUrl(userMessage)) {
+      console.log('[Chat] Bare YouTube URL detected → direct download');
       setIsLoading(true);
       const result = await downloadYouTubeAudio(userMessage);
       if (result.skipped) {
@@ -489,6 +547,11 @@ function ChatSection({ isInTab = false }) {
       }
       setIsLoading(false);
       return;
+    }
+
+    // Log if message contains a YT URL mixed with other text — this goes to /chat
+    if (containsYouTubeUrl(userMessage)) {
+      console.log('[Chat] YouTube URL + text detected → routing to /chat for multi-intent parsing');
     }
 
     setIsLoading(true);
@@ -510,8 +573,51 @@ function ChatSection({ isInTab = false }) {
       const answerText = response.answer || response.message || 'קיבלתי את הבקשה';
       addMessage('assistant', answerText);
 
-      if (response.command && Object.keys(response.command).length > 0) {
-        await applyCommand(response.command);
+      // Log server-side debug info if present
+      if (response.debug) {
+        console.log('[Chat] === SERVER DEBUG ===');
+        console.log('[Chat] Detected intents:', response.debug.detected_intents);
+        console.log('[Chat] Command count:', response.debug.command_count);
+        console.log('[Chat] Regex extracted:', response.debug.regex_extracted);
+        if (response.debug.parse_error) {
+          console.warn('[Chat] LLM parse error:', response.debug.parse_error);
+        }
+        console.log('[Chat] ====================');
+      }
+
+      // Multi-intent: support both "commands" (array) and legacy "command" (single)
+      let commands = response.commands || [];
+      if (commands.length === 0 && response.command && Object.keys(response.command).length > 0) {
+        commands = [response.command];
+      }
+
+      console.log(`[Chat] Multi-intent: ${commands.length} command(s) to execute:`, JSON.stringify(commands));
+
+      if (commands.length > 0) {
+        // Sort: style commands first, action commands (process_video) last
+        const styleCommands = commands.filter(c => c.action !== 'process_video');
+        const actionCommands = commands.filter(c => c.action === 'process_video');
+
+        console.log(`[Chat] Pipeline: ${styleCommands.length} style → ${actionCommands.length} action`);
+
+        // Apply style commands first so settings are in place before processing
+        for (let i = 0; i < styleCommands.length; i++) {
+          const cmd = styleCommands[i];
+          if (Object.keys(cmd).length > 0) {
+            console.log(`[Chat] ▶ Style [${i + 1}/${styleCommands.length}]:`, cmd);
+            await applyCommand(cmd);
+            console.log(`[Chat] ✓ Style [${i + 1}/${styleCommands.length}] applied`);
+          }
+        }
+        // Then trigger action commands
+        for (let i = 0; i < actionCommands.length; i++) {
+          console.log(`[Chat] ▶ Action [${i + 1}/${actionCommands.length}]:`, actionCommands[i]);
+          await applyCommand(actionCommands[i]);
+          console.log(`[Chat] ✓ Action [${i + 1}/${actionCommands.length}] triggered`);
+        }
+        console.log(`[Chat] All ${commands.length} command(s) applied successfully`);
+      } else {
+        console.log('[Chat] No commands to apply (text-only response)');
       }
 
     } catch (error) {

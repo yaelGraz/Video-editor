@@ -12,12 +12,14 @@ from typing import Optional, List, Dict, Tuple
 import base64
 
 # =============================================================================
-# SSL Certificate Bypass for Windows
+# SSL Certificate Bypass for Windows + NetFree compatibility
 # =============================================================================
 # Must be set before any HTTPS requests
 os.environ['HTTPLIB2_CA_CERTS'] = ""
 os.environ['PYTHONHTTPSVERIFY'] = '0'
 os.environ['REQUESTS_CA_BUNDLE'] = ''
+os.environ['SSL_CERT_FILE'] = ''          # httpx (used by google-genai SDK)
+os.environ['CURL_CA_BUNDLE'] = ''         # curl-based libraries
 try:
     ssl._create_default_https_context = ssl._create_unverified_context
 except AttributeError:
@@ -104,7 +106,7 @@ def get_video_frame_count(video_path: str) -> int:
             "-of", "default=nokey=1:noprint_wrappers=1",
             str(video_path)
         ]
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+        result = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=60)
         if result.stdout.strip().isdigit():
             return int(result.stdout.strip())
     except:
@@ -1306,12 +1308,29 @@ def generate_ai_thumbnail_image(
     title: str,
     output_path: str,
     progress_callback=None,
-    punchline: str = None
+    punchline: str = None,
+    provider: str = "leonardo",
+    netfree_mode: bool = False
 ) -> Tuple[bool, Optional[str]]:
     """
-    Generate AI thumbnail using Leonardo AI with text overlay.
-    Returns (success, original_url).
+    Generate AI thumbnail with text overlay.
+    Routes to Leonardo or Gemini (Nano Banana) based on provider.
+    Returns (success, result_data).
     """
+    if provider == "nano-banana":
+        return _generate_image_gemini(prompt, title, output_path, progress_callback, punchline, netfree_mode)
+    else:
+        return _generate_image_leonardo(prompt, title, output_path, progress_callback, punchline)
+
+
+def _generate_image_leonardo(
+    prompt: str,
+    title: str,
+    output_path: str,
+    progress_callback=None,
+    punchline: str = None
+) -> Tuple[bool, Optional[str]]:
+    """Generate AI thumbnail using Leonardo AI."""
     if not LEONARDO_API_KEY:
         print("[ERROR] Leonardo API key not configured")
         return False, None
@@ -1322,7 +1341,11 @@ def generate_ai_thumbnail_image(
         import io
 
         if progress_callback:
-            progress_callback(10, "יוצר תמונת AI...")
+            progress_callback(10, "יוצר תמונה ב-Leonardo...")
+
+        # Use a session with verify=False to bypass NetFree/SSL filtering
+        session = requests.Session()
+        session.verify = False
 
         # Leonardo API request
         url = "https://cloud.leonardo.ai/api/rest/v1/generations"
@@ -1341,7 +1364,7 @@ def generate_ai_thumbnail_image(
             "num_images": 1
         }
 
-        response = requests.post(url, json=payload, headers=headers)
+        response = session.post(url, json=payload, headers=headers)
 
         if response.status_code != 200:
             print(f"[ERROR] Leonardo API error: {response.text}")
@@ -1354,14 +1377,14 @@ def generate_ai_thumbnail_image(
             return False, None
 
         if progress_callback:
-            progress_callback(30, "מחכה לתוצאה...")
+            progress_callback(30, "מחכה לתוצאה מ-Leonardo...")
 
         # Poll for result
         result_url = f"https://cloud.leonardo.ai/api/rest/v1/generations/{generation_id}"
 
         for _ in range(30):
             time.sleep(2)
-            result = requests.get(result_url, headers=headers)
+            result = session.get(result_url, headers=headers)
 
             if result.status_code == 200:
                 data = result.json()
@@ -1373,11 +1396,16 @@ def generate_ai_thumbnail_image(
                     if progress_callback:
                         progress_callback(80, "מוריד תמונה...")
 
-                    # Download image
-                    img_response = requests.get(image_url)
+                    # Download image directly to memory (BytesIO) with verify=False
+                    # to try to bypass NetFree content filtering
+                    img_response = session.get(image_url, headers={
+                        "User-Agent": "Mozilla/5.0",
+                        "Accept": "*/*",
+                    })
                     if img_response.status_code == 200:
-                        # Add text overlay to AI image
-                        img = Image.open(io.BytesIO(img_response.content)).convert('RGBA')
+                        # Load bytes directly into PIL - no temp file
+                        raw_bytes = io.BytesIO(img_response.content)
+                        img = Image.open(raw_bytes).convert('RGBA')
 
                         # Add punchline text overlay
                         img = _add_text_overlay_to_image(img, title, punchline)
@@ -1395,7 +1423,111 @@ def generate_ai_thumbnail_image(
         return False, None
 
     except Exception as e:
-        print(f"[ERROR] AI thumbnail generation failed: {e}")
+        print(f"[ERROR] Leonardo thumbnail generation failed: {e}")
+        import traceback
+        traceback.print_exc()
+        return False, None
+
+
+def _generate_image_gemini(
+    prompt: str,
+    title: str,
+    output_path: str,
+    progress_callback=None,
+    punchline: str = None,
+    netfree_mode: bool = False
+) -> Tuple[bool, Optional[str]]:
+    """
+    Generate AI thumbnail using Gemini 2.5 Flash (Nano Banana).
+
+    Two modes:
+      Normal:  SDK inline bytes -> PIL -> text overlay -> base64 data URI -> frontend
+      NetFree: SDK inline bytes -> PIL -> text overlay -> save to file -> localhost URL
+    Both use generateContent endpoint (same as text chat) with inline_data response.
+    """
+    if not GEMINI_API_KEY:
+        print("[ERROR] Gemini API key not configured")
+        return False, None
+
+    try:
+        from google import genai
+        from PIL import Image
+        import io
+        import httpx
+
+        mode_label = "NetFree" if netfree_mode else "Normal"
+        if progress_callback:
+            progress_callback(10, "יוצר תמונה ב-Nano Banana...")
+
+        # httpx with verify=False to bypass SSL interception
+        http_client = httpx.Client(verify=False)
+        client = genai.Client(api_key=GEMINI_API_KEY, http_options={"httpx_client": http_client})
+
+        if progress_callback:
+            progress_callback(30, "מייצר תמונה עם Gemini...")
+
+        print(f"[NANO-BANANA] Mode={mode_label}, calling generateContent...")
+
+        # Uses generateContent endpoint (like text chat) — NOT imagen:predict
+        response = client.models.generate_content(
+            model="gemini-2.5-flash-image",
+            contents=f"Generate a high-quality 16:9 cinematic image for a video thumbnail. The image should be: {prompt}",
+            config=genai.types.GenerateContentConfig(
+                response_modalities=["IMAGE", "TEXT"],
+            ),
+        )
+
+        # Extract inline bytes — no URL, no download
+        raw_bytes = None
+        for part in response.candidates[0].content.parts:
+            if part.inline_data and part.inline_data.data:
+                raw_bytes = part.inline_data.data
+                print(f"[NANO-BANANA] Got {len(raw_bytes)} bytes inline from SDK")
+                break
+
+        if not raw_bytes:
+            print("[ERROR] Gemini returned no image in inline_data")
+            return False, None
+
+        if progress_callback:
+            progress_callback(70, "מעבד תמונה...")
+
+        # Bytes -> PIL (in memory)
+        img = Image.open(io.BytesIO(raw_bytes)).convert('RGBA')
+
+        # Resize to 16:9 if needed
+        target_w, target_h = 1280, 720
+        if img.size != (target_w, target_h):
+            img = img.resize((target_w, target_h), Image.LANCZOS)
+
+        # Text overlay (in memory)
+        img = _add_text_overlay_to_image(img, title, punchline)
+
+        img_rgb = img.convert('RGB')
+
+        if netfree_mode:
+            # NetFree mode: save to local file, return "file:" marker
+            # Frontend will load from localhost (not filtered by NetFree)
+            img_rgb.save(str(output_path), "JPEG", quality=90)
+            print(f"[NANO-BANANA] NetFree mode: saved to {output_path}")
+            if progress_callback:
+                progress_callback(100, "תמונה נשמרה!")
+            return True, "file"
+        else:
+            # Normal mode: return base64 data URI (no file, no URL)
+            if progress_callback:
+                progress_callback(90, "ממיר לתצוגה...")
+            buffer = io.BytesIO()
+            img_rgb.save(buffer, format="JPEG", quality=90)
+            b64_str = base64.b64encode(buffer.getvalue()).decode('utf-8')
+            data_uri = f"data:image/jpeg;base64,{b64_str}"
+            print(f"[NANO-BANANA] Normal mode: base64 ready ({len(b64_str) // 1024}KB)")
+            if progress_callback:
+                progress_callback(100, "תמונת AI נוצרה!")
+            return True, data_uri
+
+    except Exception as e:
+        print(f"[ERROR] Gemini thumbnail generation failed: {e}")
         import traceback
         traceback.print_exc()
         return False, None

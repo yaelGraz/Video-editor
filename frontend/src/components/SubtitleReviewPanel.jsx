@@ -76,7 +76,9 @@ function SubtitleReviewPanel() {
 
   const resetAndResume = () => {
     if (typeof setSubtitleReview === 'function') {
-      setSubtitleReview({ isActive: false, entries: [], pendingFileId: null });
+      // Preserve entries + fileId for other tabs (Effects Studio etc.) - only dismiss the panel
+      const finalEntries = localEntries.length > 0 ? localEntries : (subtitleReview.entries || []);
+      setSubtitleReview({ isActive: false, entries: finalEntries, pendingFileId: subtitleReview.pendingFileId });
     }
     setIsExpanded(false);
     setLocalEntries([]);

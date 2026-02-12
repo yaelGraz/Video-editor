@@ -568,6 +568,11 @@ function ManualEditor() {
       const data = await response.json();
 
       if (data.file_id) {
+        // Store file_id immediately so Effects tab can find the video on server
+        if (typeof ctx.setUploadedVideoId === 'function') {
+          ctx.setUploadedVideoId(data.file_id);
+          console.log('[ManualEditor] Stored file_id as uploadedVideoId:', data.file_id);
+        }
         const ws = new WebSocket(`${ctx.wsUrl}/ws/progress/${data.file_id}`);
 
         ws.onmessage = (event) => {
@@ -582,6 +587,11 @@ function ManualEditor() {
             if (msg.thumbnail_url) ctx.setThumbnailUrl(msg.thumbnail_url);
             if (msg.ai_thumbnail_url) ctx.setAiThumbnailUrl(msg.ai_thumbnail_url);
             if (msg.shorts_urls?.length > 0) ctx.setShortsUrls(msg.shorts_urls);
+            // Capture music URL from backend (auto-selected music)
+            if (msg.music_url && !ctx.audioUrl) {
+              console.log('[ManualEditor] Setting audioUrl from backend:', msg.music_url);
+              ctx.setAudioUrl(msg.music_url);
+            }
             ws.close();
           }
 

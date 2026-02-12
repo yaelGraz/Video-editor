@@ -10,7 +10,8 @@ import {
   EditorTab,
   YouTubeTab,
   PlannerTab,
-  MarketingDashboard
+  MarketingDashboard,
+  EffectsStudioTab
 } from './components';
 
 // API Configuration
@@ -41,6 +42,11 @@ const Icons = {
     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M7.217 10.907a2.25 2.25 0 100 2.186m0-2.186c.18.324.283.696.283 1.093s-.103.77-.283 1.093m0-2.186l9.566-5.314m-9.566 7.5l9.566 5.314m0 0a2.25 2.25 0 103.935 2.186 2.25 2.25 0 00-3.935-2.186zm0-12.814a2.25 2.25 0 103.933-2.185 2.25 2.25 0 00-3.933 2.185z" />
     </svg>
+  ),
+  effects: (
+    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.455 2.456L21.75 6l-1.036.259a3.375 3.375 0 00-2.455 2.456zM16.894 20.567L16.5 21.75l-.394-1.183a2.25 2.25 0 00-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 001.423-1.423l.394-1.183.394 1.183a2.25 2.25 0 001.423 1.423l1.183.394-1.183.394a2.25 2.25 0 00-1.423 1.423z" />
+    </svg>
   )
 };
 
@@ -49,7 +55,8 @@ const TOP_TABS = [
   { id: 'editor', label: 'עריכת וידאו', icon: Icons.editor },
   { id: 'youtube', label: 'ייבוא מיוטיוב', icon: Icons.youtube },
   { id: 'planner', label: 'תכנון תסריט', icon: Icons.planner },
-  { id: 'marketing', label: 'הפצה ושיווק', icon: Icons.marketing }
+  { id: 'marketing', label: 'הפצה ושיווק', icon: Icons.marketing },
+  { id: 'effects', label: 'אפקטים ותוספות', icon: Icons.effects }
 ];
 
 // =============================================================================
@@ -211,8 +218,8 @@ function VideoEditorWorkspace({ apiUrl, wsUrl }) {
     }
   };
 
-  // 2. Generate AI Image (Leonardo) with optional custom prompt
-  const generateMarketingAiImage = async (customPrompt = null) => {
+  // 2. Generate AI Image (Leonardo or Nano Banana) with optional custom prompt
+  const generateMarketingAiImage = async (customPrompt = null, provider = 'leonardo', netfreeMode = false) => {
     if (isGeneratingAiImage) return { success: false, error: 'כבר מייצר...' };
     setIsGeneratingAiImage(true);
 
@@ -221,6 +228,8 @@ function VideoEditorWorkspace({ apiUrl, wsUrl }) {
 
       const formData = new FormData();
       formData.append('video_id', videoId);
+      formData.append('provider', provider);
+      formData.append('netfree_mode', netfreeMode ? 'true' : 'false');
       if (customPrompt && customPrompt.trim()) {
         formData.append('custom_prompt', customPrompt.trim());
       }
@@ -234,13 +243,17 @@ function VideoEditorWorkspace({ apiUrl, wsUrl }) {
 
       if (data.status === 'success') {
         setAiThumbnailUrl(data.ai_thumbnail_url);
-        console.log('[AiImage] Success:', data.ai_thumbnail_url);
+        console.log(`[AiImage] Success (${provider}):`, data.ai_thumbnail_url?.substring(0, 60));
+        return { success: true, data };
+      } else if (data.status === 'netfree_preview') {
+        // NetFree mode: return preview URL for approval flow
+        console.log(`[AiImage] NetFree preview:`, data.preview_url);
         return { success: true, data };
       } else {
         throw new Error(data.error || 'שגיאה ביצירת תמונת AI');
       }
     } catch (error) {
-      console.error('[AiImage] Error:', error);
+      console.error(`[AiImage] Error (${provider}):`, error);
       return { success: false, error: error.message };
     } finally {
       setIsGeneratingAiImage(false);
@@ -304,7 +317,7 @@ function VideoEditorWorkspace({ apiUrl, wsUrl }) {
     thumbnailUrl, setThumbnailUrl,
     aiThumbnailUrl, setAiThumbnailUrl,
     shortsUrls, setShortsUrls,
-    uploadedVideoId,
+    uploadedVideoId, setUploadedVideoId,
     isGeneratingText, isGeneratingAiImage, isGeneratingShorts,
     // Marketing functions (separate endpoints)
     generateMarketingText,
@@ -332,6 +345,8 @@ function VideoEditorWorkspace({ apiUrl, wsUrl }) {
         return <PlannerTab />;
       case 'marketing':
         return <MarketingDashboard isFullPage={true} />;
+      case 'effects':
+        return <EffectsStudioTab />;
       default:
         return <EditorTab />;
     }

@@ -41,9 +41,12 @@ models/
 *.zip
 *.rar
 *.7z
+*.bak
 main_backup.py
 main_new.py
 frontend/src.zip
+temp_repo/
+process_video.py
 
 # Windows artifacts
 nul
@@ -71,6 +74,9 @@ yarn-error.log*
 .coverage
 htmlcov/
 .pytest_cache/
+
+# Dependency fingerprints (Run_System.bat)
+.deps/
 
 # Claude Code
 .claude/

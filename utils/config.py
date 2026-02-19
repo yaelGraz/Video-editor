@@ -110,3 +110,10 @@ TESSERACT_CMD = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
 # =============================================================================
 SRT_MIN_GAP_SECONDS = 0.3  # Minimum gap between subtitles
 SRT_SIMILARITY_THRESHOLD = 0.85  # Threshold for merging similar subtitles
+
+# =============================================================================
+# Green API (WhatsApp Integration)
+# =============================================================================
+GREEN_API_INSTANCE_ID = os.getenv("GREEN_API_INSTANCE_ID", "")
+GREEN_API_TOKEN = os.getenv("GREEN_API_TOKEN", "")
+SERVER_BASE_URL = os.getenv("SERVER_BASE_URL", "http://localhost:8000")

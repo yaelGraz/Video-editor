@@ -18,7 +18,7 @@ from services.video_service import (
 from services.marketing_service import generate_marketing_kit
 from services.greenapi_service import is_configured as greenapi_is_configured, check_connection as greenapi_check
 from services.whatsapp_chat_service import handle_whatsapp_message
-from utils.config import GROQ_API_KEY, INPUTS_DIR, OUTPUTS_DIR
+from utils.config import GROQ_API_KEY, INPUTS_DIR, OUTPUTS_DIR, SERVER_BASE_URL
 from routes.video import process_video_task
 
 router = APIRouter()
@@ -147,7 +147,7 @@ async def whatsapp_command(req: WhatsAppCommandRequest):
             )
 
             if out_path.exists():
-                return {"type": "video", "url": f"http://localhost:8000/outputs/{out_path.name}", "message": "הסרטון עובד בהצלחה!"}
+                return {"type": "video", "url": f"{SERVER_BASE_URL}/outputs/{out_path.name}", "message": "הסרטון עובד בהצלחה!"}
             return {"type": "error", "message": "העיבוד הסתיים אך הפלט לא נמצא"}
         except Exception as e:
             return {"type": "error", "message": f"שגיאה בעריכה: {str(e)}"}

@@ -18,7 +18,7 @@ from services.video_service import (
     extract_text_huggingface,
 )
 from services.marketing_service import generate_marketing_kit
-from utils.config import INPUTS_DIR, OUTPUTS_DIR
+from utils.config import INPUTS_DIR, OUTPUTS_DIR, SERVER_BASE_URL
 
 router = APIRouter()
 
@@ -68,7 +68,7 @@ async def generate_marketing_text(video_id: str = Form(...)):
             None, lambda: generate_thumbnail(str(v_path), title, str(thumb_out), None, punchline)
         )
         if ok and thumb_out.exists():
-            thumbnail_url = f"http://localhost:8000/outputs/{thumb_out.name}"
+            thumbnail_url = f"{SERVER_BASE_URL}/outputs/{thumb_out.name}"
 
         # Cache for other endpoints
         marketing_cache[file_id] = {
@@ -139,7 +139,7 @@ async def generate_marketing_ai_image(
             if is_netfree and result_data == "file" and ai_out.exists():
                 return {
                     "status": "netfree_preview",
-                    "preview_url": f"http://localhost:8000/outputs/{ai_out.name}",
+                    "preview_url": f"{SERVER_BASE_URL}/outputs/{ai_out.name}",
                     "prompt_used": image_prompt
                 }
             elif result_data and isinstance(result_data, str) and result_data.startswith("data:"):
@@ -147,7 +147,7 @@ async def generate_marketing_ai_image(
             elif ai_out.exists():
                 return {
                     "status": "success",
-                    "ai_thumbnail_url": f"http://localhost:8000/outputs/{ai_out.name}",
+                    "ai_thumbnail_url": f"{SERVER_BASE_URL}/outputs/{ai_out.name}",
                     "prompt_used": image_prompt
                 }
         return {"status": "error", "error": "נכשל ביצירת תמונת AI"}
@@ -196,7 +196,7 @@ async def generate_marketing_shorts(
         )
 
         if shorts_paths:
-            shorts_urls = [f"http://localhost:8000/outputs/shorts/{Path(p).name}" for p in shorts_paths]
+            shorts_urls = [f"{SERVER_BASE_URL}/outputs/shorts/{Path(p).name}" for p in shorts_paths]
             return {"status": "success", "shorts_urls": shorts_urls, "with_subtitles": with_subtitles, "subtitle_color": subtitle_color}
         return {"status": "error", "error": "לא נוצרו קליפים"}
 

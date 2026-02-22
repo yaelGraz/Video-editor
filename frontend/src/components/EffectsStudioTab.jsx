@@ -564,7 +564,7 @@ export default function EffectsStudioTab() {
       // Resolve the server-side video ID through multiple fallbacks
       let videoId = ctx.subtitleReview?.pendingFileId || ctx.uploadedVideoId || '';
 
-      // Fallback: extract file_id from resultUrl (e.g. "http://localhost:8000/outputs/a1b2c3d4_final.mp4")
+      // Fallback: extract file_id from resultUrl (e.g. "${ctx.apiUrl}/outputs/a1b2c3d4_final.mp4")
       if (!videoId && ctx.resultUrl) {
         const match = ctx.resultUrl.match(/\/([a-f0-9]{8})(?:_final)?\.mp4/i);
         if (match) videoId = match[1];
@@ -619,7 +619,7 @@ export default function EffectsStudioTab() {
 
       console.log('[EffectsStudio] Render request:', payload);
 
-      const response = await fetch('http://localhost:8000/api/render/effects', {
+      const response = await fetch(`${ctx.apiUrl}/api/render/effects`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -638,7 +638,7 @@ export default function EffectsStudioTab() {
         let networkErrors = 0;
         pollRef.current = setInterval(async () => {
           try {
-            const res = await fetch(`http://localhost:8000/api/render/effects/status/${taskId}`);
+            const res = await fetch(`${ctx.apiUrl}/api/render/effects/status/${taskId}`);
             const st = await res.json();
             networkErrors = 0; // Reset on success
 
@@ -1102,7 +1102,7 @@ export default function EffectsStudioTab() {
                     <button
                       onClick={() => {
                         const a = document.createElement('a');
-                        a.href = `http://localhost:8000${renderResult.url}`;
+                        a.href = `${ctx.apiUrl}${renderResult.url}`;
                         a.target = '_blank';
                         a.rel = 'noopener noreferrer';
                         a.click();

@@ -11,7 +11,7 @@ import re
 import multiprocessing
 from pathlib import Path
 
-from utils.config import BASE_DIR, OUTPUTS_DIR
+from utils.config import BASE_DIR, OUTPUTS_DIR, SERVER_BASE_URL
 
 # Path to the Remotion project
 REMOTION_DIR = BASE_DIR / "remotion-renderer"
@@ -280,9 +280,9 @@ def render_effects_video(
         video_filename = Path(video_path).name
         # Determine if the video is in inputs or outputs directory
         if str(OUTPUTS_DIR) in str(Path(video_path).resolve()):
-            video_src = f"http://localhost:8000/outputs/{video_filename}"
+            video_src = f"{SERVER_BASE_URL}/outputs/{video_filename}"
         else:
-            video_src = f"http://localhost:8000/inputs/{video_filename}"
+            video_src = f"{SERVER_BASE_URL}/inputs/{video_filename}"
 
         props = {
             # Video

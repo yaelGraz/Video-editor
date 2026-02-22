@@ -14,9 +14,11 @@ import {
   EffectsStudioTab
 } from './components';
 
-// API Configuration
-const API_URL = 'http://localhost:8000';
-const WS_URL = 'ws://localhost:8000';
+// API Configuration — use env var if set, otherwise auto-detect from browser hostname
+const _host = window.location.hostname;
+const _isLocal = _host === 'localhost' || _host === '127.0.0.1';
+const API_URL = import.meta.env.VITE_API_URL || (_isLocal ? 'http://localhost:8000' : `http://${_host}:8000`);
+const WS_URL = import.meta.env.VITE_WS_URL || (_isLocal ? 'ws://localhost:8000' : `ws://${_host}:8000`);
 
 // =============================================================================
 // Professional SVG Icons (Monochrome, Minimal)

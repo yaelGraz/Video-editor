@@ -37,7 +37,7 @@ from services.text_service import (
 from services.font_service import ensure_font_available
 from services.marketing_service import generate_marketing_kit
 from core import ai_thumbnail_original_urls
-from utils.config import INPUTS_DIR, OUTPUTS_DIR, MUSIC_DIR, MUSIC_TEMP_DIR
+from utils.config import INPUTS_DIR, OUTPUTS_DIR, MUSIC_DIR, MUSIC_TEMP_DIR, SERVER_BASE_URL
 
 router = APIRouter()
 
@@ -511,7 +511,7 @@ async def _run_post_subtitle_pipeline(
             None, lambda: generate_thumbnail(str(v_path), title, str(thumb_out), progress_callback, punchline)
         )
         if ok and thumb_out.exists():
-            thumbnail_url = f"http://localhost:8000/outputs/{thumb_out.name}"
+            thumbnail_url = f"{SERVER_BASE_URL}/outputs/{thumb_out.name}"
 
     # 9) AI Thumbnail
     if do_ai_thumbnail and marketing_data:
@@ -529,26 +529,26 @@ async def _run_post_subtitle_pipeline(
             ok, original_url = result, None
 
         if ok and ai_out.exists():
-            ai_thumbnail_url = f"http://localhost:8000/outputs/{ai_out.name}"
+            ai_thumbnail_url = f"{SERVER_BASE_URL}/outputs/{ai_out.name}"
             if original_url:
                 ai_thumbnail_original_urls[file_id] = original_url
 
     # Build result
-    result_data = {"download_url": f"http://localhost:8000/outputs/{out_path.name}"}
+    result_data = {"download_url": f"{SERVER_BASE_URL}/outputs/{out_path.name}"}
     result_data["file_id"] = file_id
     if chosen_music:
-        result_data["music_url"] = f"http://localhost:8000/assets/music/{Path(str(chosen_music)).name}"
+        result_data["music_url"] = f"{SERVER_BASE_URL}/assets/music/{Path(str(chosen_music)).name}"
     if marketing_data:
         result_data["marketing_kit"] = marketing_data
     if shorts_paths:
-        result_data["shorts"] = [f"http://localhost:8000/outputs/shorts/{Path(p).name}" for p in shorts_paths]
+        result_data["shorts"] = [f"{SERVER_BASE_URL}/outputs/shorts/{Path(p).name}" for p in shorts_paths]
     if thumbnail_url:
         result_data["thumbnail"] = thumbnail_url
     if ai_thumbnail_url:
         result_data["ai_thumbnail"] = ai_thumbnail_url
         result_data["ai_thumbnail_original_url"] = ai_thumbnail_original_urls.get(file_id)
     if voiceover_audio_path and Path(voiceover_audio_path).exists():
-        result_data["voiceover"] = f"http://localhost:8000/outputs/{Path(voiceover_audio_path).name}"
+        result_data["voiceover"] = f"{SERVER_BASE_URL}/outputs/{Path(voiceover_audio_path).name}"
 
     print(f"[INFO] Results for {file_id}: {list(result_data.keys())}")
     await manager.send_progress(file_id, 100, "completed", result_data["download_url"], result_data)

@@ -12,7 +12,7 @@ from typing import Optional
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException
 from pydantic import BaseModel
 
-from utils.config import BASE_DIR, MUSIC_DIR
+from utils.config import BASE_DIR, MUSIC_DIR, SERVER_BASE_URL
 
 router = APIRouter()
 
@@ -80,7 +80,7 @@ async def get_user_library():
         if slot["filepath"]:
             filepath = Path(slot["filepath"])
             if filepath.exists():
-                slot["url"] = f"http://localhost:8000/assets/music/user_library/{filepath.name}"
+                slot["url"] = f"{SERVER_BASE_URL}/assets/music/user_library/{filepath.name}"
             else:
                 slot["filename"] = None
                 slot["filepath"] = None
@@ -114,7 +114,7 @@ async def update_library_slot(slot_id: int, update: LibrarySlotUpdate):
         if slot.get("filepath"):
             filepath = Path(slot["filepath"])
             if filepath.exists():
-                url = f"http://localhost:8000/assets/music/user_library/{filepath.name}"
+                url = f"{SERVER_BASE_URL}/assets/music/user_library/{filepath.name}"
 
         return {
             "status": "success",
@@ -166,7 +166,7 @@ async def save_from_main_library(slot_id: int, filename: str = Form(...)):
         return {
             "status": "success",
             "slot": {"id": slot_id, "filename": safe_filename, "displayName": display_name,
-                     "url": f"http://localhost:8000/assets/music/user_library/{safe_filename}"}
+                     "url": f"{SERVER_BASE_URL}/assets/music/user_library/{safe_filename}"}
         }
 
     except HTTPException:
@@ -216,7 +216,7 @@ async def upload_to_library_slot(slot_id: int, file: UploadFile = File(...)):
         return {
             "status": "success",
             "slot": {"id": slot_id, "filename": safe_filename, "displayName": display_name,
-                     "url": f"http://localhost:8000/assets/music/user_library/{safe_filename}"}
+                     "url": f"{SERVER_BASE_URL}/assets/music/user_library/{safe_filename}"}
         }
 
     except HTTPException:
@@ -315,7 +315,7 @@ async def save_from_url_to_library(
         return {
             "status": "success",
             "slot": {"id": slot_id, "filename": final_filename, "displayName": final_display_name,
-                     "url": f"http://localhost:8000/assets/music/user_library/{final_filename}"}
+                     "url": f"{SERVER_BASE_URL}/assets/music/user_library/{final_filename}"}
         }
 
     except HTTPException:

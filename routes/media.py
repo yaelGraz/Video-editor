@@ -20,7 +20,7 @@ from services.audio_service import (
 from services.text_service import extract_text_from_file
 from services.video_service import generate_ai_thumbnail_image, download_image_from_url
 from core import ai_thumbnail_original_urls
-from utils.config import INPUTS_DIR, OUTPUTS_DIR, MUSIC_DIR, MUSIC_TEMP_DIR, ELEVENLABS_EMOTION_SETTINGS
+from utils.config import INPUTS_DIR, OUTPUTS_DIR, MUSIC_DIR, MUSIC_TEMP_DIR, ELEVENLABS_EMOTION_SETTINGS, SERVER_BASE_URL
 
 router = APIRouter()
 
@@ -65,7 +65,7 @@ async def download_yt_audio(url: str = Form(...)):
         if file_path.exists():
             return {
                 "status": "success",
-                "audioUrl": f"http://localhost:8000/assets/music/{output_filename}.mp3",
+                "audioUrl": f"{SERVER_BASE_URL}/assets/music/{output_filename}.mp3",
                 "filename": f"{output_filename}.mp3"
             }
 
@@ -91,7 +91,7 @@ async def download_yt_audio(url: str = Form(...)):
 
         return {
             "status": "success",
-            "audioUrl": f"http://localhost:8000/assets/music/{output_filename}.mp3",
+            "audioUrl": f"{SERVER_BASE_URL}/assets/music/{output_filename}.mp3",
             "filename": f"{output_filename}.mp3"
         }
     except ConnectionResetError:
@@ -124,7 +124,7 @@ async def download_youtube_video_endpoint(url: str = Form(...)):
         if file_path.exists():
             return {
                 "status": "success",
-                "videoUrl": f"http://localhost:8000/outputs/{filename}",
+                "videoUrl": f"{SERVER_BASE_URL}/outputs/{filename}",
                 "filename": filename,
                 "message": "הוידאו כבר קיים במערכת"
             }
@@ -158,7 +158,7 @@ async def download_youtube_video_endpoint(url: str = Form(...)):
 
         return {
             "status": "success",
-            "videoUrl": f"http://localhost:8000/outputs/{downloaded_file.name}",
+            "videoUrl": f"{SERVER_BASE_URL}/outputs/{downloaded_file.name}",
             "filename": downloaded_file.name,
             "title": title,
             "message": f"הוידאו '{title}' הורד בהצלחה!"
@@ -193,7 +193,7 @@ async def generate_voiceover_endpoint(video_id: str = Form(...), text: str = For
     try:
         success = generate_voiceover_sync(text, str(output_path), None)
         if success and output_path.exists():
-            return {"status": "success", "voiceover_url": f"http://localhost:8000/outputs/{output_path.name}"}
+            return {"status": "success", "voiceover_url": f"{SERVER_BASE_URL}/outputs/{output_path.name}"}
         raise HTTPException(status_code=500, detail="Failed to generate voiceover")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -215,7 +215,7 @@ async def generate_voiceover_elevenlabs_endpoint(
         )
 
         if success and output_path.exists():
-            return {"status": "success", "voiceover_url": f"http://localhost:8000/outputs/{output_path.name}"}
+            return {"status": "success", "voiceover_url": f"{SERVER_BASE_URL}/outputs/{output_path.name}"}
         raise HTTPException(status_code=500, detail="Failed to generate voiceover")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -285,7 +285,7 @@ async def generate_ai_thumbnail_endpoint(request: AIThumbnailRequest):
             success, original_url = result, None
 
         if success and output_path.exists():
-            thumbnail_url = f"http://localhost:8000/outputs/{output_path.name}"
+            thumbnail_url = f"{SERVER_BASE_URL}/outputs/{output_path.name}"
             if original_url:
                 ai_thumbnail_original_urls[request.video_id] = original_url
             return {"status": "success", "thumbnail_url": thumbnail_url, "original_url": original_url}
@@ -302,7 +302,7 @@ async def retry_download_endpoint(request: RetryDownloadRequest):
     try:
         success = download_image_from_url(request.original_url, str(output_path), request.title)
         if success and output_path.exists():
-            return {"status": "success", "thumbnail_url": f"http://localhost:8000/outputs/{output_path.name}"}
+            return {"status": "success", "thumbnail_url": f"{SERVER_BASE_URL}/outputs/{output_path.name}"}
         raise HTTPException(status_code=500, detail="Failed to download image")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

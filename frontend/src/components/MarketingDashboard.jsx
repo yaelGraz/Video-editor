@@ -173,7 +173,7 @@ function MarketingDashboard() {
 
       console.log('[YouTube Publish] Sending:', payload);
 
-      const response = await fetch('http://localhost:8000/api/publish/youtube', {
+      const response = await fetch(`${ctx.apiUrl}/api/publish/youtube`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -187,7 +187,7 @@ function MarketingDashboard() {
         const taskId = data.task_id;
         const pollInterval = setInterval(async () => {
           try {
-            const statusRes = await fetch(`http://localhost:8000/api/publish/youtube/status/${taskId}`);
+            const statusRes = await fetch(`${ctx.apiUrl}/api/publish/youtube/status/${taskId}`);
             const statusData = await statusRes.json();
 
             if (statusData.status === 'completed') {
@@ -254,7 +254,7 @@ function MarketingDashboard() {
 
       console.log('[Facebook Publish] Sending:', payload);
 
-      const response = await fetch('http://localhost:8000/api/publish/facebook', {
+      const response = await fetch(`${ctx.apiUrl}/api/publish/facebook`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -267,7 +267,7 @@ function MarketingDashboard() {
         const taskId = data.task_id;
         const pollInterval = setInterval(async () => {
           try {
-            const statusRes = await fetch(`http://localhost:8000/api/publish/facebook/status/${taskId}`);
+            const statusRes = await fetch(`${ctx.apiUrl}/api/publish/facebook/status/${taskId}`);
             const statusData = await statusRes.json();
 
             if (statusData.status === 'completed') {

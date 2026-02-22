@@ -18,3 +18,4 @@ export { default as EditorTab } from './EditorTab';
 export { default as YouTubeTab } from './YouTubeTab';
 export { default as PlannerTab } from './PlannerTab';
 export { default as EffectsStudioTab } from './EffectsStudioTab';
+export { default as LandingPageTab } from './LandingPageTab';

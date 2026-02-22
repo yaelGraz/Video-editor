@@ -79,6 +79,7 @@ from routes.publishing import router as publishing_router
 from routes.whatsapp import router as whatsapp_router
 from routes.effects import router as effects_router
 from routes.settings import router as settings_router
+from routes.landing import router as landing_router
 
 
 # =============================================================================
@@ -140,6 +141,7 @@ app.include_router(publishing_router)
 app.include_router(whatsapp_router)
 app.include_router(effects_router)
 app.include_router(settings_router)
+app.include_router(landing_router)
 
 
 # =============================================================================
